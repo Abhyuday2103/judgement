@@ -1,5 +1,5 @@
 rules_version = '2';
-// One rules file for the whole Firebase project: Teen Patti (tables), Declare (dtables) and Kachuful (ktables).
+// One rules file for the whole Firebase project: Teen Patti (tables), Declare (dtables) and Judgment (jtables).
 // Deploying this from any of the three folders keeps all three games working.
 service cloud.firestore {
   match /databases/{db}/documents {
@@ -25,7 +25,7 @@ service cloud.firestore {
         allow read, write: if false;
       }
     }
-    match /ktables/{tableId} {
+    match /jtables/{tableId} {
       allow read: if request.auth != null;
       allow write: if false;
       match /views/{uid} {

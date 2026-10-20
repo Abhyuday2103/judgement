@@ -1,11 +1,11 @@
-# Kachuful
+# Judgment
 
-Kachuful (Judgment) for 3 to 8 players, each on their own phone or laptop. Computer players are optional, for empty seats or practice.
+Judgment (also called Kachuful) for 3 to 8 players, each on their own phone or laptop. Computer players are optional, for empty seats or practice.
 
 Same setup as Teen Patti and Declare:
 - **GitHub Pages** serves the website from the `docs` folder.
-- **A Firebase function** (`kf`) shuffles, deals, checks every move and keeps score. Nobody's browser ever receives another player's cards.
-- It shares the Teen Patti Firebase project (`teenpatti-44fde`) but has its own function (`kf`), its own codebase (`kachuful`) and its own collection (`ktables`). Deploying Kachuful never touches the other two games.
+- **A Firebase function** (`jg`) shuffles, deals, checks every move and keeps score. Nobody's browser ever receives another player's cards.
+- It shares the Teen Patti Firebase project (`teenpatti-44fde`) but has its own function (`jg`), its own codebase (`judgment`) and its own collection (`jtables`). Deploying Judgment never touches the other two games.
 
 ## Files
 
@@ -39,8 +39,8 @@ Every rule setting lives in `DEFAULT_SETTINGS` at the top of `docs/engine.js`.
 ## How hands stay private
 
 1. Everyone signs in anonymously (no account, no email). Firebase gives each browser a hidden id.
-2. The function stores the full game (deck, every hand, secret bids) in `ktables/CODE/secret/state`. The database rules say nobody can read that, ever. Only the function can.
-3. After every move the function writes one view per player to `ktables/CODE/views/THEIR_ID`. Each view has only that player's cards and, until bidding ends, only their own bid. The rules let you read only the view with your own id.
+2. The function stores the full game (deck, every hand, secret bids) in `jtables/CODE/secret/state`. The database rules say nobody can read that, ever. Only the function can.
+3. After every move the function writes one view per player to `jtables/CODE/views/THEIR_ID`. Each view has only that player's cards and, until bidding ends, only their own bid. The rules let you read only the view with your own id.
 4. Every move goes through the function, which uses your sign-in id, not anything your browser claims. It checks: are you at this table, is it your turn, do you hold that card, are you following suit, is that bid allowed.
 5. Shuffling uses the crypto random generator, so it can't be predicted.
 6. Knowing a table code gets you nothing. Strangers can't read views, the secret state, or act, and can't join once a game has started.
@@ -54,12 +54,12 @@ The website part: push to GitHub and turn on Pages (Settings > Pages > Deploy fr
 The server part runs from your laptop. Install Node.js LTS from nodejs.org if you don't have it, then in Terminal:
 
 ```
-cd ~/Downloads/kachuful
+cd ~/Downloads/judgment
 npx firebase-tools login
 cd functions
 npm install
 cd ..
-npx firebase-tools deploy --only functions:kachuful,firestore:rules
+npx firebase-tools deploy --only functions:judgment,firestore:rules
 ```
 
 Then in the Firebase console, **Authentication > Settings > Authorized domains**, make sure `abhyuday2103.github.io` is listed (it already is from Teen Patti).
@@ -97,7 +97,7 @@ To test alone: open the link in a normal window and a private window on your lap
 
 Runs on the same Blaze plan as Teen Patti. A night of games uses a tiny slice of the free monthly allowance (2 million function calls, 50,000 database reads and 20,000 writes per day). Expect $0. If you want a safety net, set a $5 budget alert in Google Cloud Billing.
 
-Each table writes one small document per player per move, and each open browser checks in about every 3 seconds. An 8-player game of an hour is roughly 20,000 reads and 3,000 writes, so a couple of hours a night stays free, and going over costs cents. Old tables stay in the database but are tiny; you can delete the `ktables` collection in the Firebase console any time.
+Each table writes one small document per player per move, and each open browser checks in about every 3 seconds. An 8-player game of an hour is roughly 20,000 reads and 3,000 writes, so a couple of hours a night stays free, and going over costs cents. Old tables stay in the database but are tiny; you can delete the `jtables` collection in the Firebase console any time.
 
 ## Testing
 
@@ -114,9 +114,9 @@ The emulators run Firebase on your own computer, with the real `firestore.rules`
 
 - **"Online play is not set up yet"**: `docs/firebase-config.js` is missing its config.
 - **Stuck on "Connecting" or "auth/unauthorized-domain"**: add your github.io domain under Firebase Authentication > Settings > Authorized domains.
-- **"internal" or "not-found" error when creating a table**: the function isn't deployed. Run the deploy line again and look for `kf` in the output.
+- **"internal" or "not-found" error when creating a table**: the function isn't deployed. Run the deploy line again and look for `jg` in the output.
 - **Deploy says "Billing account not configured"**: the project needs the Blaze plan (it already has it from Teen Patti).
-- **Deploy asks to delete functions `tp` or `dc`**: answer **No**. That shouldn't happen with `--only functions:kachuful`, so double-check you're in the kachuful folder.
+- **Deploy asks to delete functions `tp` or `dc`**: answer **No**. That shouldn't happen with `--only functions:judgment`, so double-check you're in the judgment folder.
 - **EACCES or permission errors with npm on a Mac**: don't use sudo. Run `sudo chown -R $(whoami) ~/.npm` once, then retry.
 - **A friend's screen stops updating**: the app re-checks every 3 seconds and when the tab wakes up. If it's still stuck, they close and reopen the tab; their seat is saved.
 - **Teen Patti or Declare broke after deploying rules**: the `firestore.rules` here covers all three games. If you edit it, keep all three blocks.

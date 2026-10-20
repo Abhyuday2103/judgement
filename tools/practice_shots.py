@@ -24,14 +24,14 @@ with sync_playwright() as p:
                 pg.click('#ready'); continue
             if pg.is_visible('#bidbox'):
                 if 'bid' not in shots: shots.add('bid'); pg.screenshot(path=f'{out}/{tag}-bid.png')
-                btn = pg.query_selector('#bidbox [data-bid]:not([disabled])'); btn.click(); continue
+                btn = pg.query_selector('#bidbox [data-bid]:not([disabled])'); btn and btn.click(); continue
             c = pg.query_selector('#hand .hc.legal')
             if c:
                 if len(pg.query_selector_all('.tcard')) >= 3 and 'trick' not in shots: shots.add('trick'); pg.screenshot(path=f'{out}/{tag}-trick.png')
-                c.click(); pg.wait_for_timeout(60)
+                c.click(position={'x': 8, 'y': 12}); pg.wait_for_timeout(60)
                 if 'sel' not in shots and tag == 'phone': shots.add('sel'); pg.screenshot(path=f'{out}/{tag}-selected.png')
                 s = pg.query_selector('#hand .hc.sel')
-                if s: s.click()
+                if s: s.click(position={'x': 8, 'y': 12})
             pg.wait_for_timeout(120)
         pg.click('[data-open="scores"]'); pg.wait_for_timeout(400); pg.screenshot(path=f'{out}/{tag}-scores.png')
 srv.shutdown()

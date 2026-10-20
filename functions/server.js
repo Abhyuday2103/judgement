@@ -1,12 +1,12 @@
 // Everything the online server does, kept apart from Firebase setup so it can be tested without Firebase.
-// Storage layout (collection ktables):
-//   ktables/{code}                  public summary: phase, host, seat count. No cards.
-//   ktables/{code}/secret/state     full game, deck and every hand. Nobody's browser can read this.
-//   ktables/{code}/views/{uid}      what that one player is allowed to see. Only that player can read it.
-//   ktables/{code}/presence/{uid}   "last seen" ping each browser writes about itself.
+// Storage layout (collection jtables):
+//   jtables/{code}                  public summary: phase, host, seat count. No cards.
+//   jtables/{code}/secret/state     full game, deck and every hand. Nobody's browser can read this.
+//   jtables/{code}/views/{uid}      what that one player is allowed to see. Only that player can read it.
+//   jtables/{code}/presence/{uid}   "last seen" ping each browser writes about itself.
 import * as E from './engine.js';
 
-export const COL = 'ktables';
+export const COL = 'jtables';
 export const EXPIRE_MS = 24 * 60 * 60 * 1000;
 
 export function makeServer(db, { stamp = () => new Date() } = {}) {

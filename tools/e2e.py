@@ -25,9 +25,9 @@ def step(page):
             btns[len(btns) // 2].click(); return 'bid'
     c = page.query_selector('#hand .hc.legal')
     if c and c.is_visible():
-        c.click(); page.wait_for_timeout(80)
+        c.click(position={'x': 8, 'y': 12}); page.wait_for_timeout(80)
         c = page.query_selector('#hand .hc.sel')
-        if c: c.click(); return 'play'
+        if c: c.click(position={'x': 8, 'y': 12}); return 'play'
     return ''
 
 with sync_playwright() as p:
@@ -82,12 +82,12 @@ with sync_playwright() as p:
       const me = authM.getAuth(app).currentUser.uid;
       const out = {};
       const tryRead = async (k, ref) => { try { const s = await fs.getDocFromServer(ref); out[k] = s.exists() ? 'READ' : 'empty'; } catch (e) { out[k] = e.code || String(e); } };
-      await tryRead('secret', fs.doc(db, 'ktables', code, 'secret', 'state'));
-      const views = await fs.getDocs(fs.collection(db, 'ktables', code, 'views')).then(() => 'LISTED').catch((e) => e.code);
+      await tryRead('secret', fs.doc(db, 'jtables', code, 'secret', 'state'));
+      const views = await fs.getDocs(fs.collection(db, 'jtables', code, 'views')).then(() => 'LISTED').catch((e) => e.code);
       out.listViews = views;
-      await tryRead('ownView', fs.doc(db, 'ktables', code, 'views', me));
-      try { await fs.setDoc(fs.doc(db, 'ktables', code, 'presence', 'someone-else'), { at: fs.serverTimestamp() }); out.fakePresence = 'WROTE'; } catch (e) { out.fakePresence = e.code; }
-      try { await fs.setDoc(fs.doc(db, 'ktables', code, 'views', me), { json: '{}' }); out.writeView = 'WROTE'; } catch (e) { out.writeView = e.code; }
+      await tryRead('ownView', fs.doc(db, 'jtables', code, 'views', me));
+      try { await fs.setDoc(fs.doc(db, 'jtables', code, 'presence', 'someone-else'), { at: fs.serverTimestamp() }); out.fakePresence = 'WROTE'; } catch (e) { out.fakePresence = e.code; }
+      try { await fs.setDoc(fs.doc(db, 'jtables', code, 'views', me), { json: '{}' }); out.writeView = 'WROTE'; } catch (e) { out.writeView = e.code; }
       return out;
     }'''
     res = pages[2].evaluate(probe, [code])
