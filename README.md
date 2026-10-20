@@ -49,7 +49,7 @@ The firebase-config keys in `docs/` are meant to be public. They only identify t
 
 ## Deploy (one time, about 5 minutes)
 
-The website part: push to GitHub and turn on Pages (Settings > Pages > Deploy from a branch > main > /docs). Claude can do this for you.
+The website is live at https://abhyuday2103.github.io/judgement/ . GitHub Pages serves it from the `gh-pages` branch, which is a copy of the `docs` folder. Update it with `git subtree push --prefix docs origin gh-pages` (Claude does this for you).
 
 The server part runs from your laptop. Install Node.js LTS from nodejs.org if you don't have it, then in Terminal:
 
@@ -65,7 +65,7 @@ npx firebase-tools deploy --only functions:judgment,firestore:rules
 Then in the Firebase console, **Authentication > Settings > Authorized domains**, make sure `abhyuday2103.github.io` is listed (it already is from Teen Patti).
 
 ### Updating later
-- Changed anything in `docs/`: push to GitHub, live in a minute.
+- Changed anything in `docs/`: push to GitHub and update the `gh-pages` branch, live in a minute.
 - Changed anything in `functions/` or `docs/engine.js`: run `npm run sync`, push, then run the last Terminal line again.
 
 ## Playing
