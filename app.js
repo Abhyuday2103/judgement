@@ -5,9 +5,9 @@ import { firebaseConfig } from './firebase-config.js';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('kf_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem('kf_' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
-  del(k) { try { localStorage.removeItem('kf_' + k); } catch (e) { /* storage blocked */ } },
+  get(k, d) { try { const v = localStorage.getItem('jg_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('jg_' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
+  del(k) { try { localStorage.removeItem('jg_' + k); } catch (e) { /* storage blocked */ } },
 };
 const params = new URLSearchParams(location.search);
 const EMU = params.get('emu'); // ?emu=127.0.0.1 runs against the local Firebase emulators (testing only)
@@ -69,9 +69,9 @@ async function firebase() {
   if (EMU) fsM.connectFirestoreEmulator(db, EMU, 8080);
   const fns = fnM.getFunctions(app);
   if (EMU) fnM.connectFunctionsEmulator(fns, EMU, 5001);
-  const call = fnM.httpsCallable(fns, 'kf', { timeout: 15000 });
+  const call = fnM.httpsCallable(fns, 'jg', { timeout: 15000 });
   const uid = auth.currentUser.uid;
-  const viewRef = (id) => fsM.doc(db, 'ktables', id, 'views', uid);
+  const viewRef = (id) => fsM.doc(db, 'jtables', id, 'views', uid);
   const readView = (s) => (s.exists() ? JSON.parse(s.data().json) : null);
   fb = {
     uid,
@@ -86,8 +86,8 @@ async function firebase() {
     },
     watch: (id, cb) => fsM.onSnapshot(viewRef(id), (s) => { lastOk = Date.now(); const v = readView(s); if (v) cb(v); }, () => { /* the poll covers it */ }),
     get: async (id) => { const s = await fsM.getDocFromServer(viewRef(id)); lastOk = Date.now(); return readView(s); },
-    ping: (id) => fsM.setDoc(fsM.doc(db, 'ktables', id, 'presence', uid), { at: fsM.serverTimestamp() }),
-    watchPresence: (id, cb) => fsM.onSnapshot(fsM.collection(db, 'ktables', id, 'presence'), (qs) => {
+    ping: (id) => fsM.setDoc(fsM.doc(db, 'jtables', id, 'presence', uid), { at: fsM.serverTimestamp() }),
+    watchPresence: (id, cb) => fsM.onSnapshot(fsM.collection(db, 'jtables', id, 'presence'), (qs) => {
       const out = {};
       qs.forEach((d) => { const at = d.data({ serverTimestamps: 'estimate' }).at; out[d.id] = at && at.toMillis ? at.toMillis() : 0; });
       cb(out);
@@ -279,7 +279,7 @@ async function copyInvite() {
   if (EMU) u.searchParams.set('emu', EMU);
   const link = u.toString();
   if (navigator.share && matchMedia('(pointer: coarse)').matches) {
-    try { await navigator.share({ title: 'Kachuful', text: `Join my Kachuful table: ${server.code}`, url: link }); return; } catch (e) { /* fall through to copy */ }
+    try { await navigator.share({ title: 'Judgment', text: `Join my Judgment table: ${server.code}`, url: link }); return; } catch (e) { /* fall through to copy */ }
   }
   try { await navigator.clipboard.writeText(link); toast('Invite link copied.'); }
   catch (e) { prompt('Copy this link:', link); }

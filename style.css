@@ -1,4 +1,4 @@
-/* Kachuful. One-screen card table: header with round and trump, an oval felt with every seat around it,
+/* Judgment. One-screen card table: header with round and trump, an oval felt with every seat around it,
    the trick in the middle, your hand docked at the bottom.
    Look: indigo night felt, ivory cards, saffron for anything that is yours to act on. */
 :root {
@@ -45,7 +45,7 @@ button { cursor: pointer; }
 .brand-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .brand { font: 400 3.6rem/1 var(--display); margin: 0; color: var(--ivory); letter-spacing: -0.01em; }
 .brand.small { font-size: 2rem; }
-.brand-suits { display: flex; gap: 6px; font-size: 1.5rem; color: var(--ivory); padding-bottom: 6px; }
+.brand-suits { display: flex; gap: 6px; font-size: 1.5rem; font-family: 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', sans-serif; color: var(--ivory); padding-bottom: 6px; }
 .brand-suits .r { color: #ff6b6b; }
 .tag { margin: -4px 0 4px; color: var(--muted); }
 .panel { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--felt-line); border-radius: 16px; background: rgba(5, 10, 22, 0.35); }
@@ -162,6 +162,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .card.red { color: var(--red); }
 .card .idx { position: absolute; left: 7%; top: 4%; display: flex; flex-direction: column; align-items: center; line-height: 0.95; }
 .card .rk { font-weight: 800; font-size: calc(var(--w, var(--cw)) * 0.3); letter-spacing: -0.04em; }
+.card .st, .card .pip, .trump .sym, .cell-sub { font-family: 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', var(--body); }
 .card .st { font-size: calc(var(--w, var(--cw)) * 0.26); }
 .card .pip { position: absolute; right: 8%; bottom: 5%; font-size: calc(var(--w, var(--cw)) * 0.5); line-height: 1; }
 .card.trumpc { background: linear-gradient(160deg, #fff6dc 0%, var(--ivory) 55%); }

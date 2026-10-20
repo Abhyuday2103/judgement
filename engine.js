@@ -1,4 +1,4 @@
-// Kachuful / Judgment rules engine.
+// Judgment (Kachuful) rules engine.
 // The same file runs in two places:
 //   functions/engine.js  the Firebase server, which runs every online table
 //   docs/engine.js       the browser, only for practice games against computer players
