@@ -15,7 +15,7 @@ Same setup as Teen Patti and Declare:
 | `docs/engine.js` | All the rules. Also runs practice games in the browser |
 | `docs/firebase-config.js` | Your Firebase web config (already filled in, safe to be public) |
 | `functions/index.js` | The Firebase function entry point |
-| `functions/server.js` | Rooms, joining, saving state, duplicate and stale move checks |
+| `functions/server.js` | Rooms, joining, check-ins, seat hand-over, duplicate and stale move checks |
 | `functions/engine.js` | Exact copy of `docs/engine.js`. Run `npm run sync` after changing the rules |
 | `firestore.rules` | Database lock rules for all three games |
 | `tests/` | Rules tests and server tests (`npm test`) |
@@ -81,23 +81,25 @@ To test alone: open the link in a normal window and a private window on your lap
 
 | Situation | What the game does |
 |---|---|
-| Refresh, close the tab, phone sleeps | Your browser remembers the table and your id. Opening the site puts you back in your seat with your cards. |
+| Refresh, close the tab, phone sleeps | Your browser remembers the table and your id. Opening the site puts you back in your seat with your cards. If the network is bad it retries 4 times, and it never forgets your table because of a network error. |
+| Live updates freeze (common on phones) | Every open screen also checks in with the server every 2.5 seconds, so a frozen live connection can't freeze the game. Nothing heard for 12 seconds: it restarts the connection on its own. |
+| Lost your browser mid-game (new phone, cleared data, opened the link in Instagram/WhatsApp instead of Safari) | Open the link, type your name, tap Join. You get "Game in progress" with your seat listed ("I'm Eric") about 20 seconds after your old device went quiet. Tap it: same cards, same score. The old device is logged out of that seat. |
 | Internet drops | A "Reconnecting" box shows. The game waits. When you're back it catches up on its own. A Reload button appears after 25 seconds. |
 | Someone vanishes mid-game | The game waits on their turn. After about a minute the host's menu shows "X is away. Let the computer play for them". When X comes back and makes any move, they take their seat back. |
 | Someone taps Leave mid-game | The computer plays their seat. Same link brings them back. |
 | Host disappears | After about a minute anyone can tap "Become host" in the menu. If the host taps Leave, it passes to the next person automatically. |
-| New person joins after the deal | Refused with a message. They can join when the host starts a rematch (it returns everyone to the lobby). |
+| New person joins after the deal | They see the seat picker. Only seats whose device has gone quiet are offered, so they can't take a seat from someone who's playing. Truly new players join when the host starts a rematch. |
 | Double tap, slow network retry | Each move has an id. The same move twice only counts once. |
 | Move from an old screen | Refused with "The table moved on", and the screen refreshes. |
 | Two people move at the exact same moment | Each table's moves are processed one at a time (database transactions), so only the legal one goes through. |
 | Wrong or old code | "No table with that code" or "That table expired" (24 hours idle). |
-| Firebase restarts the function | Nothing lost. Every move is saved to the database before anyone sees it. The only limit: anonymous ids live in the browser, so if someone clears their browser data or switches phones mid-game, they can't reclaim their seat. The host can hand it to the computer. |
+| Firebase restarts the function | Nothing lost. Every move is saved to the database before anyone sees it. |
 
 ## Costs
 
 Runs on the same Blaze plan as Teen Patti. A night of games uses a tiny slice of the free monthly allowance (2 million function calls, 50,000 database reads and 20,000 writes per day). Expect $0. If you want a safety net, set a $5 budget alert in Google Cloud Billing.
 
-Each table writes one small document per player per move, and each open browser checks in about every 3 seconds. An 8-player game of an hour is roughly 20,000 reads and 3,000 writes, so a couple of hours a night stays free, and going over costs cents. Old tables stay in the database but are tiny; you can delete the `jtables` collection in the Firebase console any time.
+Each open browser checks in about every 2.5 seconds (one read) and stamps "still here" every 10 seconds (one write). An 8-player game of an hour is roughly 25,000 reads and 6,000 writes, so a couple of hours a night stays inside the free daily allowance, and going over costs cents. Old tables stay in the database but are tiny; you can delete the `jtables` collection in the Firebase console any time.
 
 ## Testing
 

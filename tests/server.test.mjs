@@ -13,7 +13,12 @@ function fakeDb() {
   });
   const col = (path) => ({
     path, isCol: true,
-    doc: (id) => ({ ...ref(path + '/' + id), id }),
+    doc: (id) => {
+      const r = { ...ref(path + '/' + id), id };
+      r.get = () => tx.get(r);
+      r.set = async (v) => { data.set(r.path, structuredClone(v)); };
+      return r;
+    },
   });
   const tx = {
     async get(r) {
@@ -130,7 +135,10 @@ test('reconnect: a seated player rejoining gets their seat and hand back', async
   const started = await s.handle('u0', { op: 'act', tableId: id, action: { type: 'start' } });
   const again = await s.handle('u0', { op: 'join', tableId: id, name: 'Host' });
   assert.deepEqual(again.view.hand, started.view.hand);
-  await assert.rejects(s.handle('late', { op: 'join', tableId: id, name: 'Late' }), /already started/);
+  const late = await s.handle('late', { op: 'join', tableId: id, name: 'Late' });
+  assert.equal(late.ok, false);
+  assert.ok(late.needSeat);
+  assert.ok(!('view' in late), 'a stranger gets no table view');
 });
 
 test('a whole online game finishes when everyone is on autopilot', async () => {
@@ -152,4 +160,75 @@ test('a whole online game finishes when everyone is on autopilot', async () => {
 test('old tables expire', async () => {
   const { s, id } = await setup(3);
   await assert.rejects(s.handle('u0', { op: 'view', tableId: id }, Date.now() + 25 * 3600 * 1000), /expired/);
+});
+
+test('lost device: new browser can pick up a quiet seat with the same cards and score', async () => {
+  const { db, s, id } = await setup(3);
+  const t0 = Date.now();
+  await s.handle('u0', { op: 'act', tableId: id, action: { type: 'start' } }, t0);
+  for (const u of ['u0', 'u1', 'u2']) await s.handle(u, { op: 'view', tableId: id, ping: true }, t0);
+  const before = JSON.parse(db.data.get(`${COL}/${id}/secret/state`).json);
+  const oldHand = before.hands.u1.slice().sort();
+
+  // Right away: u1 is still connected, so nobody can take the seat.
+  const early = await s.handle('phone2', { op: 'join', tableId: id, name: 'P1' }, t0 + 5000);
+  assert.ok(early.needSeat);
+  assert.ok(!early.seats.some((x) => x.uid === 'u1'), 'connected seat is not offered');
+  await assert.rejects(s.handle('phone2', { op: 'claim', tableId: id, seatUid: 'u1' }, t0 + 5000), /still connected/);
+
+  // u1's old phone goes quiet. A minute later the seat is offered and can be taken.
+  const later = t0 + 60000;
+  for (const u of ['u0', 'u2']) await s.handle(u, { op: 'view', tableId: id, ping: true }, later);
+  const offer = await s.handle('phone2', { op: 'join', tableId: id, name: 'Whoever' }, later);
+  assert.deepEqual(offer.seats.map((x) => x.uid), ['u1']);
+  const r = await s.handle('phone2', { op: 'claim', tableId: id, seatUid: 'u1' }, later);
+  assert.ok(r.ok);
+  assert.equal(r.view.me, 'phone2');
+  assert.deepEqual(r.view.hand.slice().sort(), oldHand);
+  const after = JSON.parse(db.data.get(`${COL}/${id}/secret/state`).json);
+  assert.equal(after.players[1].name, 'P1');
+  assert.ok(!after.players.some((p) => p.uid === 'u1'));
+  // The old device is now out.
+  await assert.rejects(s.handle('u1', { op: 'view', tableId: id }, later), /not at this table/);
+  // And the seat plays on: the game continues with the new device.
+  const st = after;
+  const bidder = st.players[st.bidTurn].uid;
+  const res = await s.handle(bidder, { op: 'act', tableId: id, action: { type: 'bid', n: 0, move: st.moveNo } }, later);
+  assert.ok(res.ok);
+});
+
+test('host seat taken over on a new device keeps host powers', async () => {
+  const { db, s, id } = await setup(3);
+  const t0 = Date.now();
+  await s.handle('u0', { op: 'act', tableId: id, action: { type: 'start' } }, t0);
+  await s.handle('u0', { op: 'act', tableId: id, action: { type: 'leave' } }, t0);
+  const r = await s.handle('newhost', { op: 'claim', tableId: id, seatUid: 'u0' }, t0 + 1000);
+  assert.ok(r.ok);
+  const st = JSON.parse(db.data.get(`${COL}/${id}/secret/state`).json);
+  assert.ok(['newhost', 'u1', 'u2'].includes(st.hostUid));
+  assert.equal(st.players[0].uid, 'newhost');
+  assert.equal(st.players[0].auto, false);
+});
+
+test('check-ins never write unless a computer seat is due', async () => {
+  const { db, s, id } = await setup(3);
+  await s.handle('u0', { op: 'act', tableId: id, action: { type: 'start' } });
+  const snap = db.data.get(`${COL}/${id}/secret/state`).json;
+  for (let i = 0; i < 5; i++) await s.handle('u1', { op: 'view', tableId: id });
+  assert.equal(db.data.get(`${COL}/${id}/secret/state`).json, snap);
+});
+
+test('seat hand-over moves every trace of the old id', async () => {
+  const E = await import('../docs/engine.js');
+  const st = E.createTable('X', 'a', 'A');
+  E.joinTable(st, 'b', 'B'); E.joinTable(st, 'c', 'C');
+  E.dispatch(st, 'a', { type: 'settings', settings: { maxCards: 2 } }, 1);
+  E.dispatch(st, 'a', { type: 'start' }, 1);
+  for (const p of st.players) p.auto = true;
+  let t = 1; while (st.roundIdx === 0 && st.phase !== 'roundEnd') { t += 2000; E.runBots(st, t); }
+  t += 2000; E.runBots(st, t); // into round 2
+  for (const p of st.players) p.auto = false;
+  E.renameSeat(st, 'b', 'b2');
+  const text = JSON.stringify(st);
+  assert.ok(!text.includes('"b"'), 'old id still present: ' + text.slice(0, 300));
 });

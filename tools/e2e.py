@@ -102,8 +102,8 @@ with sync_playwright() as p:
     host.screenshot(path=f'{out}/04-table-phone.png')
     pages[1].screenshot(path=f'{out}/05-table-desktop.png')
 
-    t0 = time.time(); moves = 0; shots = set(); reloaded = False
-    while time.time() - t0 < 240:
+    t0 = time.time(); moves = 0; shots = set(); reloaded = False; lost = False
+    while time.time() - t0 < 400:
         if host.is_visible('#rematch'):
             break
         for i, pg in enumerate(pages):
@@ -125,6 +125,7 @@ with sync_playwright() as p:
                 shots.add('result'); pg.screenshot(path=f'{out}/08-round-result-phone.png')
         # Mid-game, one player refreshes the page (like a phone reload) and should land back in their seat.
         if not reloaded and moves > 6:
+            pages[3].wait_for_timeout(2500)  # let any move in flight land first
             before = sorted(pages[3].eval_on_selector_all('#hand [data-card]', 'els => els.map(e => e.dataset.card)'))
             pages[3].reload()
             pages[3].wait_for_selector('#table:not([hidden])', timeout=30000)
@@ -133,6 +134,39 @@ with sync_playwright() as p:
             print('reload: hand before', before, 'after', after)
             assert before == after, 'hand changed after reload'
             reloaded = True
+            # Freeze one player's live connection for the rest of the game. Check-ins alone must keep them in sync.
+            pages[2].context.route('**/google.firestore.v1.Firestore/Listen/**', lambda r: r.abort())
+            print('froze live updates for', NAMES[2])
+        # A bit later, another player loses their browser completely (new phone, cleared data, in-app browser) mid-hand.
+        if reloaded and not lost and moves > 12 and pages[1].is_visible('#table') and len(pages[1].query_selector_all('#hand [data-card]')) > 0:
+            lost = True
+            pages[1].wait_for_timeout(2500)
+            before = sorted(pages[1].eval_on_selector_all('#hand [data-card]', 'els => els.map(e => e.dataset.card)'))
+            pages[1].context.close()
+            ctx = b.new_context(viewport={'width': 1280, 'height': 800})
+            pg = ctx.new_page()
+            pg.on('pageerror', lambda e: errors.append(f'Eric2: {e}'))
+            pg.goto(BASE + '&t=' + code)
+            pg.fill('#name', 'Eric')
+            pg.click('#join')
+            pg.wait_for_selector('#sheet:not([hidden])', timeout=30000)
+            pg.screenshot(path=f'{out}/11-seat-picker-wait.png')
+            t1 = time.time()
+            while not pg.is_visible('[data-claim]'):
+                assert time.time() - t1 < 90, 'seat never offered'
+                for other in (pages[0], pages[2], pages[3]):
+                    try: step(other)
+                    except Exception: pass
+                pg.wait_for_timeout(3000)
+            print('seat offered after', round(time.time() - t1), 's')
+            pg.screenshot(path=f'{out}/12-seat-picker.png')
+            pg.click('[data-claim]')
+            pg.wait_for_selector('#table:not([hidden])', timeout=30000)
+            pg.wait_for_timeout(800)
+            after = sorted(pg.eval_on_selector_all('#hand [data-card]', 'els => els.map(e => e.dataset.card)'))
+            print('lost device: hand before', before, 'after', after)
+            assert before == after, 'hand changed after taking the seat back'
+            pages[1] = pg
         if time.time() - t0 > 200 and not getattr(step, 'dumped', False):
             step.dumped = True
             if host.is_visible('#rematch'): continue
@@ -148,7 +182,7 @@ with sync_playwright() as p:
     print('game over titles', titles)
     totals = [pg.eval_on_selector_all('.podium .sc', 'els => els.map(e => e.textContent)') for pg in pages]
     assert all(t == totals[0] for t in totals), totals
-    assert reloaded
+    assert reloaded and lost
 
     # Rematch brings everyone back to the lobby together.
     host.click('#rematch')
