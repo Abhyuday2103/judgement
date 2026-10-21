@@ -96,52 +96,79 @@ async function firebase() {
   return fb;
 }
 class CloudServer {
-  constructor(api, code) { this.mode = 'cloud'; this.api = api; this.code = code; this.uid = api.uid; this.ticking = false; }
+  constructor(api, code) { this.mode = 'cloud'; this.api = api; this.code = code; this.uid = api.uid; this.polling = false; this.lastPing = 0; }
   watch(cb) {
     this.cb = cb;
+    // Two ways to stay in sync. The live listener is instant when it works.
+    // The check-in asks the server directly every few seconds, so a frozen listener can never freeze the game.
     this.unsub = this.api.watch(this.code, cb);
     this.unsubP = this.api.watchPresence(this.code, (p) => { presence = p; render(); });
-    this.poll = setInterval(() => this.refresh(), 3000);
-    this.tickTimer = setInterval(() => this.tick(), 500);
-    this.pingTimer = setInterval(() => this.ping(), 25000);
-    this.ping();
-    this.onWake = () => { if (document.visibilityState === 'visible') { this.relisten(); this.ping(); } };
+    this.stopped = false;
+    this.schedule(0);
+    this.onWake = () => { if (document.visibilityState === 'visible') { this.relisten(); this.schedule(0); } };
     document.addEventListener('visibilitychange', this.onWake);
     window.addEventListener('online', this.onWake);
+    window.addEventListener('focus', this.onWake);
   }
-  ping() { this.api.ping(this.code).catch(() => {}); }
   relisten() {
     if (this.unsub) this.unsub();
     this.unsub = this.api.watch(this.code, this.cb);
-    this.refresh();
+    if (this.unsubP) this.unsubP();
+    this.unsubP = this.api.watchPresence(this.code, (p) => { presence = p; render(); });
   }
-  async refresh() { try { const v = await this.api.get(this.code); if (v) this.cb(v); } catch (e) { /* next poll */ } }
-  // Computer players and autopilot seats move when one browser nudges the server.
-  // Only one browser does the nudging: the first connected human in seat order.
-  async tick() {
+  schedule(ms) {
+    clearTimeout(this.pollTimer);
+    if (!this.stopped) this.pollTimer = setTimeout(() => this.checkIn(), ms);
+  }
+  // How soon to check in again: quickly when a computer seat is about to move, otherwise every 2.5 seconds.
+  nextDelay() {
     const v = view;
-    if (this.ticking || !v || !['bid', 'play', 'roundEnd'].includes(v.phase)) return;
-    const actor = v.phase === 'bid' ? v.bidTurn : v.phase === 'play' ? v.turn : null;
-    const p = v.players.find((x) => x.uid === actor);
-    const due = v.phase === 'roundEnd' ? v.players.every((x) => x.bot || x.auto || x.left || v.ready.includes(x.uid)) : p && (p.bot || p.auto);
-    if (!due || srvNow() < v.botAt) return;
-    const nudger = v.players.find((x) => !x.bot && !x.auto && !x.left && isOnline(x.uid)) || v.players.find((x) => x.uid === this.uid);
-    if (nudger.uid !== this.uid) return;
-    this.ticking = true;
-    try { const r = await this.api.call({ op: 'tick', tableId: this.code }); if (r && r.view) this.cb(r.view); } catch (e) { /* ignore */ }
-    setTimeout(() => { this.ticking = false; }, 400);
+    if (document.visibilityState === 'hidden') return 10000;
+    if (v && ['bid', 'play', 'roundEnd'].includes(v.phase)) {
+      const actor = v.phase === 'bid' ? v.bidTurn : v.phase === 'play' ? v.turn : null;
+      const p = v.players.find((x) => x.uid === actor);
+      if (p && (p.bot || p.auto)) return Math.min(2500, Math.max(250, (v.botAt || 0) - srvNow() + 60));
+    }
+    return 2500;
+  }
+  async checkIn() {
+    if (this.polling || this.stopped) return;
+    this.polling = true;
+    const ping = Date.now() - this.lastPing > 9000;
+    try {
+      const r = await withTimeout(this.api.call({ op: 'view', tableId: this.code, ping }), 9000);
+      if (ping) { this.lastPing = Date.now(); this.api.ping(this.code).catch(() => {}); } // backup stamp straight from the browser
+      if (r && r.view) this.cb(r.view);
+      this.fails = 0;
+    } catch (e) {
+      this.fails = (this.fails || 0) + 1;
+      if (/not at this table/i.test(e.message)) { this.stopped = true; seatLost(); return; }
+      if (/No table|expired/i.test(e.message)) { this.stopped = true; toast(e.message, 5000); goHome(); return; }
+    } finally {
+      this.polling = false;
+    }
+    this.schedule(this.fails ? Math.min(8000, 1500 * this.fails) : this.nextDelay());
   }
   async act(a) {
-    const r = await withTimeout(this.api.call({ op: 'act', tableId: this.code, action: { ...a, rid: rid() } }), 12000);
+    let r;
+    try {
+      r = await withTimeout(this.api.call({ op: 'act', tableId: this.code, action: { ...a, rid: rid() } }), 12000);
+    } catch (e) {
+      this.schedule(0); // whatever happened, get the real table right away
+      throw e;
+    }
     if (r && r.view) this.cb(r.view);
+    this.schedule(this.nextDelay());
     if (r && r.ok === false) throw new Error(r.error || 'Try again.');
   }
   stop() {
+    this.stopped = true;
     if (this.unsub) this.unsub();
     if (this.unsubP) this.unsubP();
-    clearInterval(this.poll); clearInterval(this.tickTimer); clearInterval(this.pingTimer);
+    clearTimeout(this.pollTimer);
     document.removeEventListener('visibilitychange', this.onWake);
     window.removeEventListener('online', this.onWake);
+    window.removeEventListener('focus', this.onWake);
   }
 }
 function withTimeout(p, ms) {
@@ -218,20 +245,76 @@ $('#create').onclick = async () => {
   } catch (e) { toast(e.message); }
   finally { loading(false); }
 };
+const definite = (msg) => /No table|expired|Type the table code|name/i.test(msg);
 async function joinCode(code, quiet) {
   const name = getName(); if (!name) return;
   code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!code) { toast('Type the table code.'); return; }
-  loading(true, quiet ? 'Getting back to your table' : 'Joining');
+  loading(true, quiet ? 'Getting you back to your table' : 'Joining');
+  let lastErr = null;
   try {
-    const api = await firebase();
-    const r = await api.call({ op: 'join', tableId: code, name });
-    enterCloud(api, r.tableId, r.view);
-  } catch (e) {
-    toast(e.message, 4500);
-    if (quiet) store.del('table');
-    clearUrl();
+    // Phones on bad signal, or a server that's been asleep, can fail the first try. Retry before giving up.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const api = await firebase();
+        const r = await withTimeout(api.call({ op: 'join', tableId: code, name }), 15000);
+        if (r.needSeat) { showSeatPicker(api, code, r.seats); return; }
+        enterCloud(api, r.tableId, r.view);
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (definite(e.message)) break;
+        loading(true, `Connection is slow, trying again (${attempt + 2} of 4)`);
+        await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+      }
+    }
+    toast(lastErr ? lastErr.message : 'Could not reach the table.', 5000);
+    // Only forget the table when it's really gone. A network failure keeps it, so the next reload tries again.
+    if (lastErr && definite(lastErr.message)) { store.del('table'); clearUrl(); }
+    else if (code) $('#code').value = code;
   } finally { loading(false); }
+}
+// This device isn't seated but the game is going: let them pick the seat that was theirs.
+let seatPick = null;
+function showSeatPicker(api, code, seats) {
+  if (seatPick) clearInterval(seatPick.timer);
+  seatPick = { api, code, seats };
+  $('#code').value = code;
+  openSheet('seat');
+  // Keep checking on its own while the picker is open, so their seat shows up as soon as it's free.
+  const timer = setInterval(() => { if (!seatPick || ui.sheet !== 'seat') { clearInterval(timer); return; } refreshSeats(true); }, 4000);
+  seatPick.timer = timer;
+}
+async function claimSeat(seatUid) {
+  const { api, code } = seatPick;
+  loading(true, 'Taking your seat');
+  try {
+    const r = await withTimeout(api.call({ op: 'claim', tableId: code, seatUid }), 15000);
+    clearInterval(seatPick.timer);
+    seatPick = null;
+    closeSheet();
+    enterCloud(api, r.tableId, r.view);
+    toast("You're back in. Same cards, same score.");
+  } catch (e) { toast(e.message, 6000); }
+  finally { loading(false); }
+}
+async function refreshSeats(quiet) {
+  if (!seatPick || seatPick.busy) return;
+  seatPick.busy = true;
+  try { await refreshSeatsNow(quiet); } finally { if (seatPick) seatPick.busy = false; }
+}
+async function refreshSeatsNow(quiet) {
+  const name = getName(); if (!name) return;
+  try {
+    const r = await seatPick.api.call({ op: 'join', tableId: seatPick.code, name });
+    if (r.needSeat) { seatPick.seats = r.seats; renderSheet(); }
+    else { const { api, timer } = seatPick; clearInterval(timer); seatPick = null; closeSheet(); enterCloud(api, r.tableId, r.view); }
+  } catch (e) { if (!quiet) toast(e.message); }
+}
+// The server says this device isn't at the table any more (someone took the seat over on another device).
+function seatLost() {
+  toast('Your seat was picked up on another device.', 6000);
+  goHome();
 }
 $('#join').onclick = () => joinCode($('#code').value);
 $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinCode($('#code').value); });
@@ -302,7 +385,16 @@ function renderRecon() {
   $('#recon-reload').hidden = !(gone && Date.now() - lastOk > 25000);
   $('#recon-msg').textContent = !navigator.onLine ? 'Your phone is offline. Your seat is saved.' : 'Lost the connection for a moment. Your seat is saved.';
 }
-setInterval(() => { if (server) renderRecon(); }, 1000);
+setInterval(() => {
+  if (!server) return;
+  renderRecon();
+  // Nothing heard for 12 seconds: restart the live listener and check in now.
+  if (server.mode === 'cloud' && Date.now() - lastOk > 12000 && Date.now() - (server.kicked || 0) > 12000) {
+    server.kicked = Date.now();
+    server.relisten();
+    server.schedule(0);
+  }
+}, 1000);
 window.addEventListener('offline', () => renderRecon());
 $('#recon-reload').onclick = () => location.reload();
 
@@ -484,6 +576,7 @@ function renderTable(v) {
   } else if (v.phase === 'roundEnd') msg = 'Round over';
   else if (v.phase === 'over') msg = 'Game over';
   if (me && me.auto && !['roundEnd', 'over'].includes(v.phase)) msg = 'The computer is playing for you. Tap any legal move to take back over.';
+  if (ui.busy && mine) msg = 'Sending...';
   st.innerHTML = msg;
   st.className = 'status' + (mine ? ' mine' : '');
 
@@ -581,12 +674,13 @@ function autoSheets(v) {
 const nameOf = (v, uid) => { const p = v.players.find((x) => x.uid === uid); return p ? p.name : '?'; };
 function renderSheet() {
   const v = view;
-  if (!v && ui.sheet !== 'rules') { closeSheet(); return; }
+  if (!v && ui.sheet !== 'rules' && ui.sheet !== 'seat') { closeSheet(); return; }
   $('#sheet').hidden = false;
   $('#scrim').hidden = false;
   const body = $('#sheet-body');
   const close = '<button class="btn slim ghost" data-close type="button">Close</button>';
   if (ui.sheet === 'rules') body.innerHTML = rulesHTML(close);
+  else if (ui.sheet === 'seat') body.innerHTML = seatHTML(close);
   else if (ui.sheet === 'scores') body.innerHTML = `<div class="sheet-head"><h2>Scores</h2>${close}</div>${leaderHTML(v)}<h3>Round by round</h3>${gridHTML(v)}`;
   else if (ui.sheet === 'result') body.innerHTML = resultHTML(v);
   else if (ui.sheet === 'over') body.innerHTML = overHTML(v);
@@ -656,6 +750,17 @@ function menuHTML(v, close) {
     <p class="sub">Host: ${esc(nameOf(v, v.hostUid))}</p>
     <div class="menu-list">${items.join('')}</div>`;
 }
+function seatHTML(close) {
+  const seats = (seatPick && seatPick.seats) || [];
+  const list = seats.length
+    ? `<div class="menu-list">${seats.map((p) => `<button class="btn" data-claim="${esc(p.uid)}" type="button">I'm ${esc(p.name)}</button>`).join('')}</div>`
+    : '<p class="note">Every seat is still connected. If one is yours on another phone or browser, close it there. Your seat shows up here within about 20 seconds.</p>';
+  return `<div class="sheet-head"><h2>Game in progress</h2>${close}</div>
+    <p class="sub">Table ${esc(seatPick ? seatPick.code : '')}. If you were playing and got kicked out, pick your seat. You keep your cards and score.</p>
+    ${list}
+    <button class="btn ghost" id="seat-refresh" type="button">Check again</button>
+    <p class="note">New players can join when the host starts a rematch.</p>`;
+}
 function rulesHTML(close) {
   return `<div class="sheet-head"><h2>How to play</h2>${close}</div>
   <ol class="rules">
@@ -672,6 +777,8 @@ function rulesHTML(close) {
 $('#sheet').addEventListener('click', async (e) => {
   const t = e.target.closest('button');
   if (!t) return;
+  if (t.dataset.claim) { claimSeat(t.dataset.claim); return; }
+  if (t.id === 'seat-refresh') { refreshSeats(); return; }
   if (t.id === 'ready') act({ type: 'ready' });
   else if (t.id === 'force') act({ type: 'forceNext' });
   else if (t.id === 'rematch') { if (await act({ type: 'rematch' })) closeSheet(); }

@@ -401,6 +401,36 @@ export function dispatch(st, uid, a, now, presence = {}) {
   st.lastActive = now;
 }
 
+// ---------- giving a seat to a new device ----------
+// Someone lost their sign-in (new browser, cleared data, in-app browser): hand their seat, cards and score to the new id.
+export function renameSeat(st, oldUid, newUid) {
+  const p = playerOf(st, oldUid);
+  need(p && !p.bot, 'That seat is not available.');
+  need(idxOf(st, newUid) < 0, "You're already at this table.");
+  const move = (obj) => { if (obj && oldUid in obj) { obj[newUid] = obj[oldUid]; delete obj[oldUid]; } };
+  p.uid = newUid;
+  p.auto = false;
+  p.left = false;
+  if (st.hostUid === oldUid) st.hostUid = newUid;
+  move(st.hands); move(st.bids); move(st.won); move(st.scores); move(st.rids);
+  st.ready = st.ready.map((u) => (u === oldUid ? newUid : u));
+  for (const t of st.trick) if (t.uid === oldUid) t.uid = newUid;
+  if (st.lastTrick) {
+    for (const t of st.lastTrick.cards) if (t.uid === oldUid) t.uid = newUid;
+    if (st.lastTrick.winner === oldUid) st.lastTrick.winner = newUid;
+  }
+  for (const h of st.history) move(h.rows);
+  st.seq++;
+}
+// True when a computer player or autopilot seat has a move waiting.
+export function botsDue(st, now) {
+  if (now < st.botAt) return false;
+  if (st.phase === 'bid') return controlledByComputer(st.players[st.bidTurn]);
+  if (st.phase === 'play') return controlledByComputer(st.players[st.turn]);
+  if (st.phase === 'roundEnd') return !st.players.some((p) => !controlledByComputer(p) && !p.left && !st.ready.includes(p.uid));
+  return false;
+}
+
 // ---------- computer players ----------
 function estimateTricks(hand, trump, nPlayers) {
   let est = 0;
