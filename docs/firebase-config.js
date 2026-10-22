@@ -1,21 +1,11 @@
-// Paste your Firebase web config here (Firebase console > Project settings > Your apps > Web app).
-// Same Firebase project as Teen Patti and Declare. These keys are meant to be public; the Firestore rules do the protecting.
+// Firebase project "game-night" (shared by all the games). These keys are safe to publish;
+// the Firestore rules do the protecting. If this project is ever down, online tables run on the
+// host's browser instead (see p2p/hybrid.js), so the games keep working.
 export const firebaseConfig = {
-  apiKey: "AIzaSyD1wommGCDAjLUpC258ATEd1tTdrSqa6NI",
-  authDomain: "teenpatti-44fde.firebaseapp.com",
-  projectId: "teenpatti-44fde",
-  storageBucket: "teenpatti-44fde.firebasestorage.app",
-  messagingSenderId: "174340110949",
-  appId: "1:174340110949:web:aa4ba414a64fc10b3fa48c",
-  measurementId: "G-VM0DDHP7S4"
+  apiKey: "AIzaSyDVwa3a1qBGqwHt8HZYGbuhZ4pDHPO5rzY",
+  authDomain: "game-night-83c72.firebaseapp.com",
+  projectId: "game-night-83c72",
+  storageBucket: "game-night-83c72.firebasestorage.app",
+  messagingSenderId: "57365224732",
+  appId: "1:57365224732:web:4b1366c58d76a75240eed9"
 };
-
-// Example:
-// export const firebaseConfig = {
-//   apiKey: "AIza...",
-//   authDomain: "your-project.firebaseapp.com",
-//   projectId: "your-project",
-//   storageBucket: "your-project.appspot.com",
-//   messagingSenderId: "123456789",
-//   appId: "1:123456789:web:abc123"
-// };

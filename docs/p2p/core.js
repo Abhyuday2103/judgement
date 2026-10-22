@@ -1,4 +1,4 @@
-// Online play without a cloud server.
+// Online play fallback when the cloud server is down (see hybrid.js for the switch).
 // The host's browser runs the game's original server code (srv/index.js) against a small in-memory
 // database. Everyone else connects straight to the host over PeerJS (same setup as Ultimate Hold'em).
 // The firebase-*.js files next to this one give the game page the same calls it used with Firebase,
@@ -9,11 +9,13 @@ const LS = (k) => `p2p_${CFG.fn}_${k}`;
 const lsGet = (k, d) => { try { const v = localStorage.getItem(LS(k)); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(LS(k), JSON.stringify(v)); } catch (e) { /* storage blocked */ } };
 
-export const uid = (() => {
+export let uid = (() => {
   let u = lsGet('uid', null);
   if (!u) { u = 'u' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); lsSet('uid', u); }
   return u;
 })();
+// When the Firebase server is reachable we use its sign-in id everywhere, so one id works in both modes.
+export function setUid(u) { if (u && u !== uid) { uid = u; lsSet('uid', u); } }
 
 // ---------- timestamps ----------
 export const TS_SENTINEL = '__p2p_server_ts__';
