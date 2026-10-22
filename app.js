@@ -57,7 +57,7 @@ let fb = null;
 async function firebase() {
   if (fb) return fb;
   if (!firebaseConfig) throw new Error('Online play is not set up yet. Add your Firebase config (see README).');
-  const base = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  const base = new URL('./p2p/', import.meta.url).href; // online play runs host-to-player now, see p2p/core.js
   const [appM, authM, fsM, fnM] = await Promise.all(['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js', 'firebase-functions.js'].map((f) => import(base + f)));
   const app = appM.initializeApp(firebaseConfig);
   const auth = authM.getAuth(app);
