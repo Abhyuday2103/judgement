@@ -122,3 +122,6 @@ The emulators run Firebase on your own computer, with the real `firestore.rules`
 - **EACCES or permission errors with npm on a Mac**: don't use sudo. Run `sudo chown -R $(whoami) ~/.npm` once, then retry.
 - **A friend's screen stops updating**: the app re-checks every 3 seconds and when the tab wakes up. If it's still stuck, they close and reopen the tab; their seat is saved.
 - **Teen Patti or Declare broke after deploying rules**: the `firestore.rules` here covers all three games. If you edit it, keep all three blocks.
+
+## Online play (Oct 2026)
+Online tables no longer need the Firebase function. The host's browser runs the same server code (`srv/`) and friends connect straight to the host, same as Ultimate Hold'em. See `p2p/core.js`. If the host closes the page the table pauses until they come back; a refresh is fine.
