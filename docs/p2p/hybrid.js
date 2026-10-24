@@ -88,9 +88,9 @@ export async function call(data) {
   let firstErr = null;
   try {
     const r = await cloudCall(data);
-    if (!(r && r.ok === false && /No table/i.test(r.error || ''))) { if (code) remember(code, 'cloud'); return r; }
+    if (!(r && r.ok === false && /No table|not found/i.test(r.error || ''))) { if (code) remember(code, 'cloud'); return r; }
   } catch (e) {
-    if (!e.infra && !/No table|expired/i.test(e.message || '')) throw gameErr(e);
+    if (!e.infra && !/No table|not found|expired/i.test(e.message || '')) throw gameErr(e);
     firstErr = e.infra ? null : e;
   }
   try {
@@ -98,7 +98,7 @@ export async function call(data) {
     if (code) remember(code, 'host');
     return r;
   } catch (e) {
-    throw gameErr(firstErr && /No table/i.test(e.message) ? firstErr : e);
+    throw gameErr(firstErr && /No table|not found/i.test(e.message) ? firstErr : e);
   }
 }
 
